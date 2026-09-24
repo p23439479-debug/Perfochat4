@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Supabase Chat</title>
+    <!-- Подключаем Supabase SDK -->
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        #chat { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        .msg { margin-bottom: 8px; }
+        .sender { font-weight: bold; color: #007bff; }
+    </style>
+</head>
+<body>
+
+    <h2>Supabase Realtime Chat</h2>
+    <div id="chat"></div>
+    
+    <input type="text" id="username" placeholder="Ваше имя" required><br><br>
+    <input type="text" id="messageInput" placeholder="Введите сообщение..." style="width: 300px;">
+    <button onclick="sendMessage()">Отправить</button>
+
+    <script>
+        // Инициализация клиента Supabase (замените своими ключами из настроек проекта Settings -> API)
+        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const chatDiv = document.getElementById('chat');
+
+        // 1. Функция загрузки старых сообщений из БД при старте
+        async function loadMessages() {
+            const { data, error } = await supabase
+                .from('messages')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (data) data.forEach(appendMessage);
+        }
+
+        // 2. Функция отображения сообщения на экране
+        function appendMessage(msg) {
+            const msgEl = document.createElement('div');
+            msgEl.className = 'msg';
+            msgEl.innerHTML = `<span class="sender">${msg.sender}:</span> ${msg.text}`;
+            chatDiv.appendChild(msgEl);
+            chatDiv.scrollTop = chatDiv.scrollHeight; // Скролл вниз
+        }
+
+        // 3. Функция отправки сообщения в БД
+        async function sendMessage() {
+            const sender = document.getElementById('username').value || 'Аноним';
+            const text = document.getElementById('messageInput').value;
+            if (!text) return;
+
+            const { error } = await supabase
+                .from('messages')
+                .insert([{ sender, text }]);
+
+            if (!error) document.getElementById('messageInput').value = '';
+        }
+
+        // 4. ПОДПИСКА НА РЕАЛЬНОЕ ВРЕМЯ (Realtime)
+        supabase
+            .channel('public:messages')
+            .on('postgres_changes', { event: 'INSERT', scheme: 'public', table: 'messages' }, payload => {
+                appendMessage(payload.new); // Как только в БД падает строка, она тут же рендерится у всех
+            })
+            .subscribe();
+
+        // Запуск
+        loadMessages();
+    </script>
+</body>
+</html>
